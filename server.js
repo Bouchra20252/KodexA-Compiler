@@ -5,6 +5,8 @@ const fs = require('fs');
 const { exec } = require('child_process');
 const session = require('express-session');
 const app = express();
+const upload = multer(); // Use memory storage by default
+
 
 const historyFile = 'history.json';
 
@@ -33,13 +35,7 @@ app.use(session({
     cookie: { secure: false } // true if HTTPS
 }));
 
-// File upload setup
-const MAX_SIZE = 3 * 1024; // 3KB
-const storage = multer.memoryStorage();
-const upload = multer({
-    storage,
-    limits: { fileSize: MAX_SIZE }
-});
+
 
 // Language detection
 function detectLanguageFromFile(filename) {
@@ -138,19 +134,6 @@ app.post('/run-code', upload.single('file'), (req, res) => {
 
     // Check if file was uploaded
     if (req.file) {
-        const fileSize = req.file.size;
-        console.log('Uploaded file size (bytes):', fileSize);
-
-        // Check if the file size exceeds the max size
-        if (fileSize > MAX_SIZE) {
-            // Save the code and language to session and redirect to sign-up
-            req.session.pendingCode = req.file.buffer.toString();
-            req.session.pendingLang = detectLanguageFromFile(req.file.originalname);
-
-            console.log('Redirecting to sign-up due to file size limit.');
-            return res.redirect('/sign-up');
-        }
-
         // Detect language from the uploaded file
         language = detectLanguageFromFile(req.file.originalname);
         code = req.file.buffer.toString();
@@ -169,40 +152,10 @@ app.post('/run-code', upload.single('file'), (req, res) => {
     runCode(language, code, res);
 });
 
+
 // Home
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'frontend.html'));
-});
-
-// Sign-up page
-app.get('/sign-up', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'sign-up.html'));
-});
-
-// Handle sign-up (form)
-app.post('/sign-up', (req, res) => {
-    const { username, password, confirmPassword } = req.body;
-
-    if (password !== confirmPassword) {
-        return res.status(400).send('❌ Passwords do not match.');
-    }
-
-    console.log(`✅ User ${username} signed up.`);
-
-    const pendingCode = req.session.pendingCode;
-    const pendingLang = req.session.pendingLang;
-
-    if (pendingCode && pendingLang) {
-        delete req.session.pendingCode;
-        delete req.session.pendingLang;
-        return runCode(pendingLang, pendingCode, res);
-    }
-
-    res.send(`✅ User ${username} registered successfully!`);
-});
-
-app.get('/login', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'login.html'));
 });
 
 // Start server
